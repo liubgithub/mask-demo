@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>设置mask的投射距离，以限制投射范围</title>
+	<style type="text/css">
+		html,
+		body {
+			margin: 0px;
+			height: 100%;
+			width: 100%
+		}
+
+		.container {
+			width: 100%;
+			height: 100%;
+			background-color: rgba(1, 1, 1, 0.2)
+		}
+	</style>
+	<!-- <script type="text/javascript" src="http://localhost:8012/dist/maptalks.js"></script>
+	    <script type="text/javascript" src="../../../gl/dist/maptalksgl.js"></script>
+		<script type="text/javascript" src="../../../vt/dist/maptalks.vt.js"></script>
+		<script type="text/javascript" src="../../dist/maptalks.gltf.js"></script> -->
+	<script type="text/javascript" src="maptalks-gl.js"></script>
+	<body>
+
+		<div style="position:absolute;width:50px;height:50px;display: none;z-index: 1;">
+			<video id="playArea" disabled="true" src="./test.mp4" autoplay loop
+				style="width: 100%;height: 100%;"></video>
+		</div>
+		<div id="map" class="container"></div>
+		<input type="button" id="btn" style="position: absolute;width: 80px;height: 20px;left: 10px;top: 10px;"/>
+
+		<script type="module">
+			import GUI from './lil-gui.module.min.js';
+            import frustum from './js/frustum.js';
+			const params = {
+				height: 1000,
+                distance: 2000,
+				longitude: 0.001,
+				latitude: -0.001,
+				horizontal: 60,
+				vertical: 60,
+				pitch: 0,
+				heading:0,
+				play: renderFrustum
+			};
+
+			var map = new maptalks.Map('map', {
+				center: [114.14850977777779, 38.03880611111111],
+				zoom: 15,
+				pitch: 0,
+				zoomControl: true,
+				spatialReference: {
+					projection: 'EPSG:4326'
+				},
+			});
+			
+			let baseLayer = new maptalks.TileLayer('base', {
+				tileSystem: [1, -1, -180, 90],
+				urlTemplate: 'https://t{s}.tianditu.gov.cn/img_c/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=c&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=349f6b213b98a6c2cee477ac2da5f6b8',
+				subdomains: ["0", "1", "2", "3", "4", "5", "6", "7"],
+				attribution: '&copy; <a target="_blank" href="http://www.tianditu.cn">Tianditu</a>',
+				cssFilter: 'brightness(100%) saturate(100%)',
+				maxAvailableZoom: 18,
+				opacity: 0.8
+			});
+			//自动化
+			let terrain = {
+				type: 'tianditu',
+				maxAvailableZoom: 12,
+				tileSize: 256,
+				terrainWidth: 65,
+				shader: 'lit',
+				maxAvailableZoom: 20,
+				tileSystem: [1, -1, -180, 90],
+				urlTemplate: 'https://t{s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=349f6b213b98a6c2cee477ac2da5f6b8&x={x}&y={y}&l={z}',
+				subdomains: ['1', '2', '3', '4', '5']
+			};
+            const linestringLayer = new maptalks.LineStringLayer('helperLinestringLayer');
+			const group = new maptalks.GroupGLLayer('group', [baseLayer, linestringLayer], {
+				terrain,
+				sceneConfig: {
+					"environment": {
+						"enable": false,
+						"mode": 0,
+						"level": 0,
+						"brightness": 1
+					},
+					"shadow": {
+						"type": "esm",
+						"enable": false,
+						"quality": "high",
+						"opacity": 0.5,
+						"color": [
+							0,
+							0,
+							0
+						],
+						"blurOffset": 1
+					},
+					"postProcess": {
+						enable: true,
+						antialias: {
+							enable: true
+						},
+						ssr: {
+							enable: true
+						},
+						bloom: {
+							enable: true
+						},
+						outline: {
+							enable: true
+						}
+					}
+				}
+			}).addTo(map);
+            const center = map.getCenter();
+			const vLayer = new maptalks.VectorLayer('vectot',).addTo(map);
+			
+
+			function updateHelperLine(topCoord, coordinates) {
+				const helperLinestringLayer = group.getLayer('helperLinestringLayer');
+				helperLinestringLayer.clear();				
+				for (let i = 0; i < coordinates.length; i++) {
+					const line = new maptalks.LineString([
+						coordinates[i],
+						topCoord
+					], {
+						symbol: {
+							lineColor: [1, 1, 0, 1],
+							lineWidth: 2
+						}
+					}).addTo(helperLinestringLayer);
+
+                    const baseLine = new maptalks.LineString(i < coordinates.length - 1 ? [
+						coordinates[i],
+						coordinates[i + 1]
+					] : [coordinates[i], coordinates[0]], {
+						symbol: {
+							lineColor: [0, 1, 1, 1],
+							lineWidth: 2
+						}
+					}).addTo(helperLinestringLayer);
+				}
+			}
+
+			function initGUI() {
+				const gui = new GUI();
+				gui.add(params, 'height', 1000, 5000 ).name('飞行高度').onFinishChange(value => {
+					renderFrustum();
+				});
+                gui.add(params, 'distance', 1000, 5000 ).name('投射距离').onFinishChange(value => {
+					renderFrustum();
+				});
+				gui.add(params, 'longitude', -0.1, 0.1).name('经度偏离').onFinishChange(value => {
+					renderFrustum();
+				});
+				gui.add(params, 'latitude', -0.1, 0.1).name('纬度偏离').onFinishChange(value => {
+					renderFrustum();
+				});
+				gui.add(params, 'horizontal', 0, 180).name('水平夹角').onFinishChange(value => {
+					renderFrustum();
+				});
+
+				gui.add(params, 'vertical', 0, 180).name('垂直夹角').onFinishChange(value => {
+					renderFrustum();
+				});
+
+				gui.add(params, 'pitch', -80, 80).name('俯仰角').onFinishChange(value => {
+					renderFrustum();
+				});
+
+				gui.add(params, 'heading', -180, 180).name('偏航角').onFinishChange(value => {
+					renderFrustum();
+				});
+				
+				gui.add(params, 'play').name('更新四棱锥');
+			}
+			initGUI();
+
+			const terrainLayer = group.getLayer('__terrain_in_group');
+			//重写
+			terrainLayer['getProjViewMatrixInOrtho'] = function(maskExtent) {
+				const center = maskExtent.getCenter();
+				const zoom = map.getFitZoom(maskExtent);
+				if (!this._vmap) {
+					const container = document.createElement('div');
+					container.style.width = map.width + 'px';
+					container.style.height = map.height + 'px';
+					container.style.position = 'absolute';
+					container.style.top = '0px';
+					container.style.left = '0px';
+					container.style.zIndex = '-1';
+					document.body.appendChild(container);
+					this._vmap = new maptalks.Map(container, { center, zoom, pitch: 0, bearing: 0, spatialReference: map.getSpatialReference().options });
+				}
+				this._vmap.setView({ center, zoom, pitch: 0, bearing: 0 });
+				const mapExtent = this._vmap.getExtent();
+				const pvMatrix = maptalks.mat4.copy([], this._vmap.projViewMatrix);
+				return { mapExtent, projViewMatrix: pvMatrix };
+			}
+
+			function raycastTest(line, name) {
+				const results = [];
+				const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
+				const raycast = new maptalks.RayCaster(line.from, line.to, true);
+                const result = raycast.test(meshes, map);
+                if (result && result.length) {
+                    const coord = result[0].coordinates[0].coordinate;
+                    if (frustum.isInLine(line.from, line.to, coord)) {
+                        results.push(coord);
+                        new maptalks.Marker(results[0], {
+                            symbol: {
+                                textName: name,
+                                textFill: '#f00',
+                                textDy: -20,
+                                markerType: 'ellipse',
+                                markerWidth: 10,
+                                markerHeight: 10
+                            }
+                        }).addTo(vLayer);
+                    }
+                }
+				return results[0];
+			}
+
+
+            let mk = null;
+            function renderFrustum() {
+                const glRes = map.getGLRes();
+                const topcoord = new maptalks.Coordinate(center.x, center.y, params.height)
+                const point = map.coordinateToPointAtRes(topcoord, glRes);
+                const pointZ = map.altitudeToPoint(topcoord.z, glRes);
+                const pitch = params.pitch;
+                const heading = params.heading;
+                const horizontal = params.horizontal;
+                const vertical = params.vertical;
+                const pointAltitude = map.altitudeToPoint(topcoord.z - params.distance, glRes);
+                const distance = pointZ - pointAltitude;
+                const r = frustum.calculatePyramidBase([point.x, point.y, pointZ], pitch, heading, distance, horizontal, vertical);
+                const basePoints = r.basePoints;
+                const coordinates = basePoints.map(bp => {
+                    const c = map.pointAtResToCoordinate(new maptalks.Point(bp[0], bp[1]), glRes);
+                    c.z = bp[2] / map.altitudeToPoint(1, glRes);
+                    return c;
+                })
+				vLayer.clear();
+                updateHelperLine(topcoord, coordinates);
+                const frustumLines = pitch > 0 ? {
+                    lb: {
+                        from: topcoord,
+                        to: coordinates[0]
+                    },
+                    rb: {
+                        from: topcoord,
+                        to: coordinates[1]
+                    },
+                    rt: {
+                        from: topcoord,
+                        to: coordinates[2]
+                    },
+                    lt: {
+                        from: topcoord,
+                        to: coordinates[3]
+                    },
+                    rt2rb: coordinates[2].z > coordinates[1].z ? {
+                        from: coordinates[2],
+                        to: coordinates[1]
+                    } : { from: coordinates[1], to: coordinates[2] },
+                    lt2lb: coordinates[3].z > coordinates[0].z ? {
+                        from: coordinates[3],
+                        to: coordinates[0],
+                    } : { from: coordinates[0], to: coordinates[3] }
+                } : {
+                    lb: {
+                        from: topcoord,
+                        to: coordinates[0]
+                    },
+                    rb: {
+                        from: topcoord,
+                        to: coordinates[1]
+                    },
+                    rt: {
+                        from: topcoord,
+                        to: coordinates[2]
+                    },
+                    lt: {
+                        from: topcoord,
+                        to: coordinates[3]
+                    },
+                    lt2lb: coordinates[3].z > coordinates[0].z ? {
+                        from: coordinates[3],
+                        to: coordinates[0],
+                    } : { from: coordinates[0], to: coordinates[3] },
+                    rt2rb: coordinates[2].z > coordinates[1].z ? {
+                        from: coordinates[2],
+                        to: coordinates[1]
+                    } : { from: coordinates[1], to: coordinates[2] }
+                };
+                const maskCoordinates = [];
+                for (const name in frustumLines) {
+                    const intersectPoint = raycastTest(frustumLines[name], name);
+                    if (intersectPoint) {
+                        maskCoordinates.push(intersectPoint);
+                    }
+                }
+                if (maskCoordinates.length < 4) {
+                    return;
+                }
+                if (!mk) {
+                    mk = new maptalks.ImageMask(maskCoordinates, {
+                        url: "./images/test.jpg"
+                    });
+                    terrainLayer.setMask(mk);
+                } else {
+                    mk.setCoordinates(maskCoordinates);
+                }
+            }
+		</script>
+	</body>
+</html>

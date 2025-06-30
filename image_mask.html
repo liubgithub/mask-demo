@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>瓦片图层与地理投影 - 只显示指定范围内的瓦片</title>
+	<style type="text/css">
+		html,
+		body {
+			margin: 0px;
+			height: 100%;
+			width: 100%
+		}
+
+		.container {
+			width: 100%;
+			height: 100%;
+			background-color: rgba(1, 1, 1, 0.2)
+		}
+	</style>
+	<!-- <script type="text/javascript" src="http://localhost:8012/dist/maptalks.js"></script>
+	    <script type="text/javascript" src="../../../gl/dist/maptalksgl.js"></script>
+		<script type="text/javascript" src="../../../vt/dist/maptalks.vt.js"></script>
+		<script type="text/javascript" src="../../dist/maptalks.gltf.js"></script> -->
+	<script type="text/javascript" src="maptalks-gl.js"></script>
+	<!-- <script src="https://unpkg.com/@turf/turf/turf.min.js"></script> -->
+	<body>
+
+		<div style="position:absolute;width:50px;height:50px;display: none;z-index: 1;">
+			<video id="playArea" disabled="true" src="./test.mp4" autoplay loop
+				style="width: 100%;height: 100%;"></video>
+		</div>
+		<div id="map" class="container"></div>
+		<input type="button" id="btn" style="position: absolute;width: 80px;height: 20px;left: 10px;top: 10px;"/>
+
+		<script type="module">
+			import GUI from './lil-gui.module.min.js';
+			const params = {
+				height: 3000,
+				longitude: 0.001,
+				latitude: -0.001,
+				horizontal: 90,
+				vertical: 90,
+				pitch: 0,
+				heading:0,
+				play: updateMask
+			};
+
+			var map = new maptalks.Map('map', {
+				center: [114.14850977777779, 38.03880611111111],
+				zoom: 15,
+				pitch: 0,
+				zoomControl: true,
+				spatialReference: {
+					projection: 'EPSG:4326'
+				},
+			});
+
+			let bbox = [114.15619459252804,
+				30.564413272378374, 114.37327754185209, 30.770277535054237
+			];
+			
+			let baseLayer = new maptalks.TileLayer('base', {
+				tileSystem: [1, -1, -180, 90],
+				urlTemplate: 'https://t{s}.tianditu.gov.cn/img_c/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=c&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=349f6b213b98a6c2cee477ac2da5f6b8',
+				subdomains: ["0", "1", "2", "3", "4", "5", "6", "7"],
+				attribution: '&copy; <a target="_blank" href="http://www.tianditu.cn">Tianditu</a>',
+				cssFilter: 'brightness(100%) saturate(100%)',
+				maxAvailableZoom: 18,
+				opacity: 0.8
+			});
+
+			let va = [
+				[
+					[
+						106.69794234244392,
+						29.53322364725615
+					],
+					[
+						106.69794234244392,
+						29.49743650979333
+					],
+					[
+						106.77090898657491,
+						29.49743650979333
+					],
+					[
+						106.77090898657491,
+						29.53322364725615
+					],
+					[
+						106.69794234244392,
+						29.53322364725615
+					]
+				]
+			];
+			const mk = new maptalks.ImageMask(va, {
+				url: "./images/test.jpg"
+			});
+			//自动化
+			let terrain = {
+				type: 'tianditu',
+				maxAvailableZoom: 12,
+				tileSize: 256,
+				terrainWidth: 65,
+				shader: 'lit',
+				maxAvailableZoom: 20,
+				tileSystem: [1, -1, -180, 90],
+				urlTemplate: 'https://t{s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=349f6b213b98a6c2cee477ac2da5f6b8&x={x}&y={y}&l={z}',
+				subdomains: ['1', '2', '3', '4', '5'],
+				masks:[mk]
+			};
+
+			const group = new maptalks.GroupGLLayer('group', [baseLayer], {
+				terrain,
+				sceneConfig: {
+					"environment": {
+						"enable": false,
+						"mode": 0,
+						"level": 0,
+						"brightness": 1
+					},
+					"shadow": {
+						"type": "esm",
+						"enable": false,
+						"quality": "high",
+						"opacity": 0.5,
+						"color": [
+							0,
+							0,
+							0
+						],
+						"blurOffset": 1
+					},
+					"postProcess": {
+						enable: true,
+						antialias: {
+							enable: true
+						},
+						ssr: {
+							enable: true
+						},
+						bloom: {
+							enable: true
+						},
+						outline: {
+							enable: true
+						}
+					}
+				}
+			}).addTo(map);
+			const vLayer = new maptalks.VectorLayer('vectot',).addTo(map);
+			new maptalks.Marker([114.14850977777779, 38.03880611111111]).addTo(vLayer);
+			//动画线，用于更新mask的路径
+			const line = new maptalks.LineString([
+				[106.7345920439795, 29.516617210522977],
+				[107.01001817610259, 29.51335186744767],
+				[107.1323400975232, 29.40321886786791]
+			], {
+				symbol: {
+					lineColor: [1, 1, 1, 1],
+					lineWidth: 1,
+					lineOpacity: 1
+				}
+			}).addTo(vLayer);
+
+			map.on('click', e => {
+				console.log(e.coordinate)
+			});
+
+			function updateHelperLine(topCoord, coordinates) {
+				let helperLinestringLayer = group.getLayer('helperLinestringLayer');
+				if (!helperLinestringLayer) {
+					helperLinestringLayer = new maptalks.LineStringLayer('helperLinestringLayer').addTo(group);
+				}
+				helperLinestringLayer.clear();				
+				for (let i = 0; i < coordinates.length; i++) {
+					const line = new maptalks.LineString([
+						coordinates[i],
+						topCoord
+					], {
+						symbol: {
+							lineColor: [1, 1, 0, 1],
+							lineWidth: 2
+						}
+					}).addTo(helperLinestringLayer);
+				}
+			}//17 + 5.4 + 4 + 1 + 1 = 28.6
+			function calculateIntersections(f, h, v, pitch, heading, height) {
+				// 将角度转换为弧度
+				const hRad = toRadians(h / 2);
+				const vRad = toRadians(v / 2);
+				const pitchRad = toRadians(pitch);
+				const headingRad = toRadians(heading);
+				
+				// 定义视锥体的四个方向向量（未旋转前）
+				// 左上、左下、右下、右上
+				const directions = [
+					[-Math.tan(hRad), Math.tan(vRad), -1], // 左上
+					[-Math.tan(hRad), -Math.tan(vRad), -1], // 左下
+					[Math.tan(hRad), -Math.tan(vRad), -1], // 右下
+					[Math.tan(hRad), Math.tan(vRad), -1]  // 右上
+				];
+				
+				// 应用旋转变换
+				const rotatedDirections = directions.map(dir => {
+					// 首先绕x轴旋转pitch角度
+					let x = dir[0];
+					let y = dir[1] * Math.cos(pitchRad) - dir[2] * Math.sin(pitchRad);
+					let z = dir[1] * Math.sin(pitchRad) + dir[2] * Math.cos(pitchRad);
+					
+					// 然后绕z轴旋转heading角度
+					const xNew = x * Math.cos(headingRad) - y * Math.sin(headingRad);
+					const yNew = x * Math.sin(headingRad) + y * Math.cos(headingRad);
+					
+					return [xNew, yNew, z];
+				});
+				
+				// 计算射线与水平平面的交点
+				const intersections = rotatedDirections.map(dir => {
+					// 参数方程: f + t * dir = (x, y, height)
+					// 求解t: f[2] + t * dir[2] = height
+					const t = (height - f[2]) / dir[2];
+					
+					// 计算交点坐标
+					return [
+						f[0] + t * dir[0],
+						f[1] + t * dir[1],
+						height
+					];
+				});
+				
+				return intersections;
+			}
+
+			function toRadians(degrees) {
+				return degrees * Math.PI / 180;
+			}
+
+			function initGUI() {
+				const gui = new GUI();
+				gui.add(params, 'height', 1000, 5000 ).name('飞行高度').onChange((value) => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+				gui.add(params, 'longitude', -0.1, 0.1).name('经度偏离').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+				gui.add(params, 'latitude', -0.1, 0.1).name('纬度偏离').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+				gui.add(params, 'horizontal', 0, 180).name('水平夹角').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+
+				gui.add(params, 'vertical', 0, 180).name('垂直夹角').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+
+				gui.add(params, 'pitch', -80, 80).name('俯仰角').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+
+				gui.add(params, 'heading', -180, 180).name('偏航角').onChange(value => {
+					upadateMask();
+				}).onFinishChange(value => {
+					upadateMask();
+				});
+				
+				gui.add(params, 'play').name('更新图片');
+			}
+			initGUI();
+			const center = map.getCenter();
+			function renderMask(f, h, v, pitch, heading) {
+				// const f = [114.14850977777779, 38.03880611111111, 351.091];
+				// const h = 71.10492759852485;
+				// const v = 56.44719382248666;
+				// const pitch = 0;
+				// const heading = 121.4;
+				const topCoord = new maptalks.Coordinate( f[0], f[1], f[2]);
+				const topPoint = map.coordinateToPointAtRes(topCoord, map.getGLRes());
+				const zPoint = map.altitudeToPoint(topCoord.z, map.getGLRes());
+				const intersections = calculateIntersections([topPoint.x, topPoint.y, zPoint], h, v, pitch, heading, 0);
+				const newCoordinates = intersections.map(p => {
+					const coord = map.pointAtResToCoordinate(new maptalks.Point(p[0], p[1]), map.getGLRes());
+					coord.z = p[2] / map.altitudeToPoint(1, map.getGLRes());
+					return coord;
+				});
+				const results = raycastTest(topCoord, newCoordinates);
+				if (results.length === 4) {
+					mk.setCoordinates(results);
+					updateHelperLine(f, results);
+				} else if (results.length) {
+					const heightPoint = map.altitudeToPoint(results[0].z, map.getGLRes());
+					const intersects = calculateIntersections([topPoint.x, topPoint.y, zPoint], h, v, pitch, heading, heightPoint);
+					const coords = intersects.map(p => {
+						const coord = map.pointAtResToCoordinate(new maptalks.Point(p[0], p[1]), map.getGLRes());
+						coord.z = p[2] / map.altitudeToPoint(1, map.getGLRes());
+						return coord;
+					});
+					mk.setCoordinates(newCoordinates);
+					updateHelperLine(f, newCoordinates);
+				}
+			}
+
+			function upadateMask() {
+				const longitude = center.x + params.longitude;
+				const latitude = center.y + params.latitude;
+				renderMask([
+					longitude,
+					latitude,
+					params.height
+				], params.horizontal, params.vertical, params.pitch, params.heading);
+			}
+
+			function updateMask() {
+				mk.setUrl('./images/grid.png');
+			}
+
+			const terrainLayer = group.getLayer('__terrain_in_group');
+			//重写
+			terrainLayer['getProjViewMatrixInOrtho'] = function(maskExtent) {
+				const center = maskExtent.getCenter();
+				const zoom = map.getFitZoom(maskExtent);
+				if (!this._vmap) {
+					const container = document.createElement('div');
+					container.style.width = map.width + 'px';
+					container.style.height = map.height + 'px';
+					container.style.position = 'absolute';
+					container.style.top = '0px';
+					container.style.left = '0px';
+					container.style.zIndex = '-1';
+					document.body.appendChild(container);
+					this._vmap = new maptalks.Map(container, { center, zoom, pitch: 0, bearing: 0, spatialReference: map.getSpatialReference().options });
+				}
+				this._vmap.setView({ center, zoom, pitch: 0, bearing: 0 });
+				const mapExtent = this._vmap.getExtent();
+				const pvMatrix = maptalks.mat4.copy([], this._vmap.projViewMatrix);
+				return { mapExtent, projViewMatrix: pvMatrix };
+			}
+
+			function raycastTest(from, coordinates) {
+				const results = [];
+				vLayer.clear();
+				const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
+				for (let i = 0; i < coordinates.length; i++) {
+					const to = coordinates[i];
+					const raycast = new maptalks.RayCaster(from, to, true);
+					const result = raycast.test(meshes, map);
+					if (result && result.length) {
+						results.push(result[0].coordinates[0].coordinate);
+						new maptalks.Marker(result[0].coordinates[0].coordinate, {
+							symbol: {
+								textName: i,
+								textFill: '#f00',
+								textDy: -20,
+								markerType: 'ellipse',
+								markerWidth: 10,
+								markerHeight: 10
+							}
+						}).addTo(vLayer);
+					}
+				}
+				return results;
+			}
+
+			// setTimeout(() => {
+			// 	terrainLayer.setMask([]);
+			// }, 20000);
+			document.getElementById('btn').onclick = function() {
+				terrainLayer.setMask([mk, mk]);
+			}
+
+			renderMask();
+		</script>
+	</body>
+</html>

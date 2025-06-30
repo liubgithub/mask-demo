@@ -229,7 +229,7 @@
             let mk = null;
             function renderFrustum() {
                 const glRes = map.getGLRes();
-                const topcoord = new maptalks.Coordinate(center.x, center.y, params.height)
+                const topcoord = new maptalks.Coordinate(center.x + params.longitude, center.y + params.latitude, params.height)
                 const point = map.coordinateToPointAtRes(topcoord, glRes);
                 const pointZ = map.altitudeToPoint(topcoord.z, glRes);
                 const pitch = params.pitch;

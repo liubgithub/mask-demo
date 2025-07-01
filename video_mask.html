@@ -248,13 +248,10 @@
       };
 
       let mk = null;
-      function raycastTest(line, isBaseLines) {
+      function raycastTest(line, index) {
 				const results = [];
 				const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
-				let from = line[0], to = line[1];
-				if (isBaseLines) {
-					from = line[0].z > line[1].z ? line[0] : line[1], to = line[0].z > line[1].z ? line[1] : line[0];
-				}
+				const from = line[0].z > line[1].z ? line[0] : line[1], to = line[0].z > line[1].z ? line[1] : line[0];
 				const raycast = new maptalks.RayCaster(from, to, true);
         const result = raycast.test(meshes, map);
         if (result && result.length) {
@@ -273,7 +270,7 @@
                 }).addTo(vLayer);
             }
         }
-				return results[0];
+				return { coordinate: results[0], index };
 			}
 
       function renderFrustum() {
@@ -301,29 +298,36 @@
 					[topcoord, coordinates[1]],
 					[topcoord, coordinates[2]],
 					[topcoord, coordinates[3]],
+          [coordinates[2], coordinates[3]],
 					[coordinates[0], coordinates[1]],
 					[coordinates[1], coordinates[2]],
-					[coordinates[2], coordinates[3]],
 					[coordinates[3], coordinates[0]]
 				];
         const maskCoordinates = [];
+        let hasBaselinePoint = false;
         for (let i = 0; i < frustumLines.length; i++) {
-            const intersectPoint = raycastTest(frustumLines[i], i > 3);
-            if (intersectPoint) {
-                maskCoordinates.push(intersectPoint);
+            const result = raycastTest(frustumLines[i], i);
+            if (result.coordinate) {
+                maskCoordinates.push(result.coordinate);
+                if (result.index > 3) {
+                  hasBaselinePoint = true;
+                }
             }
         }
-        const sortedCoordinates = frustum.convexHullCounterClockwise(maskCoordinates);
-        if (sortedCoordinates.length < 4) {
-            return;
+        if (hasBaselinePoint) {
+          const lastOne = maskCoordinates.pop();
+          maskCoordinates.unshift(lastOne);
+        }
+        if (maskCoordinates.length < 4) {
+           return;
         }
         if (!mk) {
-            mk = new maptalks.VideoMask(sortedCoordinates, {
+            mk = new maptalks.VideoMask(maskCoordinates, {
               elementId: 'playArea'
             });
             terrainLayer.setMask(mk);
         } else {
-            mk.setCoordinates(sortedCoordinates);
+            mk.setCoordinates(maskCoordinates);
         }
       }
 		</script>

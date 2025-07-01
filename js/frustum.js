@@ -244,6 +244,51 @@ const frustum = {
         const lastOne = hull.pop();
         hull.unshift(lastOne);
         return hull;
+    },
+
+    fixCoordinates: function(sortedCoordinates) {
+        // 计算第4个点使其形成90度夹角的凸四边形
+        const p1 = sortedCoordinates[0];
+        const p2 = sortedCoordinates[1]; 
+        const p3 = sortedCoordinates[2];
+
+        // 计算向量p2->p1和p2->p3
+        const v1 = {
+            x: p1.x - p2.x,
+            y: p1.y - p2.y,
+            z: p1.z - p2.z
+        };
+        const v2 = {
+            x: p3.x - p2.x,
+            y: p3.y - p2.y, 
+            z: p3.z - p2.z
+        };
+
+        // 计算向量长度
+        const len1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);
+        const len2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);
+
+        // 单位化向量
+        const u1 = {
+            x: v1.x / len1,
+            y: v1.y / len1,
+            z: v1.z / len1
+        };
+        const u2 = {
+            x: v2.x / len2,
+            y: v2.y / len2,
+            z: v2.z / len2
+        };
+
+        // 计算第4个点的位置
+        // 使用向量加法,使p4位于p1和p3构成的平行四边形对角线上
+        const p4 = new maptalks.Coordinate(
+            p1.x + v2.x,
+            p1.y + v2.y,
+            p1.z + v2.z
+        );
+
+        sortedCoordinates.push(p4);
     }
 }
 export default frustum;

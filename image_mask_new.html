@@ -66,15 +66,16 @@
 			});
 			//自动化
 			let terrain = {
-				type: 'tianditu',
+				type: "tianditu",
 				maxAvailableZoom: 12,
 				tileSize: 256,
 				terrainWidth: 65,
-				shader: 'lit',
+				shader: "lit",
 				maxAvailableZoom: 20,
 				tileSystem: [1, -1, -180, 90],
-				urlTemplate: 'https://t{s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=349f6b213b98a6c2cee477ac2da5f6b8&x={x}&y={y}&l={z}',
-				subdomains: ['1', '2', '3', '4', '5']
+				urlTemplate:
+				"https://t{s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=349f6b213b98a6c2cee477ac2da5f6b8&x={x}&y={y}&l={z}",
+				subdomains: ["1", "2", "3", "4", "5"],
 			};
             const linestringLayer = new maptalks.LineStringLayer('helperLinestringLayer');
 			const group = new maptalks.GroupGLLayer('group', [baseLayer, linestringLayer], {
@@ -201,120 +202,84 @@
 				return { mapExtent, projViewMatrix: pvMatrix };
 			}
 
-			function raycastTest(line, name) {
+
+            let mk = null;
+			function raycastTest(line, isBaseLines) {
 				const results = [];
 				const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
-				const raycast = new maptalks.RayCaster(line.from, line.to, true);
-                const result = raycast.test(meshes, map);
-                if (result && result.length) {
-                    const coord = result[0].coordinates[0].coordinate;
-                    if (frustum.isInLine(line.from, line.to, coord)) {
-                        results.push(coord);
-                        new maptalks.Marker(results[0], {
-                            symbol: {
-                                textName: name,
-                                textFill: '#f00',
-                                textDy: -20,
-                                markerType: 'ellipse',
-                                markerWidth: 10,
-                                markerHeight: 10
-                            }
-                        }).addTo(vLayer);
-                    }
-                }
+				let from = line[0], to = line[1];
+				if (isBaseLines) {
+					from = line[0].z > line[1].z ? line[0] : line[1], to = line[0].z > line[1].z ? line[1] : line[0];
+				}
+				const raycast = new maptalks.RayCaster(from, to, true);
+				const result = raycast.test(meshes, map);
+				if (result && result.length) {
+					const coord = frustum.findTop(result);
+					if (frustum.isInLine(from, to, coord)) {
+						results.push(coord);
+						new maptalks.Marker(results[0], {
+							symbol: {
+								textName: '',
+								textFill: '#f00',
+								textDy: -20,
+								markerType: 'ellipse',
+								markerWidth: 10,
+								markerHeight: 10
+							}
+						}).addTo(vLayer);
+					}
+				}
 				return results[0];
 			}
 
-
-            let mk = null;
             function renderFrustum() {
                 const glRes = map.getGLRes();
-                const topcoord = new maptalks.Coordinate(center.x + params.longitude, center.y + params.latitude, params.height)
-                const point = map.coordinateToPointAtRes(topcoord, glRes);
-                const pointZ = map.altitudeToPoint(topcoord.z, glRes);
-                const pitch = params.pitch;
-                const heading = params.heading;
-                const horizontal = params.horizontal;
-                const vertical = params.vertical;
-                const pointAltitude = map.altitudeToPoint(topcoord.z - params.distance, glRes);
-                const distance = pointZ - pointAltitude;
-                const r = frustum.calculatePyramidBase([point.x, point.y, pointZ], pitch, heading, distance, horizontal, vertical);
-                const basePoints = r.basePoints;
-                const coordinates = basePoints.map(bp => {
-                    const c = map.pointAtResToCoordinate(new maptalks.Point(bp[0], bp[1]), glRes);
-                    c.z = bp[2] / map.altitudeToPoint(1, glRes);
-                    return c;
-                })
-				vLayer.clear();
-                updateHelperLine(topcoord, coordinates);
-                const frustumLines = pitch > 0 ? {
-                    lb: {
-                        from: topcoord,
-                        to: coordinates[0]
-                    },
-                    rb: {
-                        from: topcoord,
-                        to: coordinates[1]
-                    },
-                    rt: {
-                        from: topcoord,
-                        to: coordinates[2]
-                    },
-                    lt: {
-                        from: topcoord,
-                        to: coordinates[3]
-                    },
-                    rt2rb: coordinates[2].z > coordinates[1].z ? {
-                        from: coordinates[2],
-                        to: coordinates[1]
-                    } : { from: coordinates[1], to: coordinates[2] },
-                    lt2lb: coordinates[3].z > coordinates[0].z ? {
-                        from: coordinates[3],
-                        to: coordinates[0],
-                    } : { from: coordinates[0], to: coordinates[3] }
-                } : {
-                    lb: {
-                        from: topcoord,
-                        to: coordinates[0]
-                    },
-                    rb: {
-                        from: topcoord,
-                        to: coordinates[1]
-                    },
-                    rt: {
-                        from: topcoord,
-                        to: coordinates[2]
-                    },
-                    lt: {
-                        from: topcoord,
-                        to: coordinates[3]
-                    },
-                    lt2lb: coordinates[3].z > coordinates[0].z ? {
-                        from: coordinates[3],
-                        to: coordinates[0],
-                    } : { from: coordinates[0], to: coordinates[3] },
-                    rt2rb: coordinates[2].z > coordinates[1].z ? {
-                        from: coordinates[2],
-                        to: coordinates[1]
-                    } : { from: coordinates[1], to: coordinates[2] }
-                };
-                const maskCoordinates = [];
-                for (const name in frustumLines) {
-                    const intersectPoint = raycastTest(frustumLines[name], name);
-                    if (intersectPoint) {
-                        maskCoordinates.push(intersectPoint);
-                    }
-                }
-                if (maskCoordinates.length < 4) {
-                    return;
-                }
+				const topcoord = new maptalks.Coordinate(center.x + params.longitude, center.y + params.latitude, params.height)
+				const point = map.coordinateToPointAtRes(topcoord, glRes);
+				const pointZ = map.altitudeToPoint(topcoord.z, glRes);
+				const pitch = params.pitch;
+				const heading = params.heading;
+				const horizontal = params.horizontal;
+				const vertical = params.vertical;
+				const pointAltitude = map.altitudeToPoint(topcoord.z - params.distance, glRes);
+				const distance = pointZ - pointAltitude;
+				const r = frustum.calculatePyramidBase([point.x, point.y, pointZ], pitch, heading, distance, horizontal, vertical);
+				const basePoints = r.basePoints;
+				const coordinates = basePoints.map(bp => {
+					const c = map.pointAtResToCoordinate(new maptalks.Point(bp[0], bp[1]), glRes);
+					c.z = bp[2] / map.altitudeToPoint(1, glRes);
+					return c;
+				})
+						vLayer.clear();
+				updateHelperLine(topcoord, coordinates);
+				const frustumLines = [
+							[topcoord, coordinates[0]],
+							[topcoord, coordinates[1]],
+							[topcoord, coordinates[2]],
+							[topcoord, coordinates[3]],
+							[coordinates[0], coordinates[1]],
+							[coordinates[1], coordinates[2]],
+							[coordinates[2], coordinates[3]],
+							[coordinates[3], coordinates[0]]
+						];
+				const maskCoordinates = [];
+				for (let i = 0; i < frustumLines.length; i++) {
+					const intersectPoint = raycastTest(frustumLines[i], i > 3);
+					if (intersectPoint) {
+						maskCoordinates.push(intersectPoint);
+					}
+				}
+				const sortedCoordinates = frustum.convexHullCounterClockwise(maskCoordinates);
+				if (sortedCoordinates.length < 4) {
+					return;
+				}
                 if (!mk) {
-                    mk = new maptalks.ImageMask(maskCoordinates, {
+                    mk = new maptalks.ImageMask(sortedCoordinates, {
                         url: "./images/test.jpg"
                     });
                     terrainLayer.setMask(mk);
                 } else {
-                    mk.setCoordinates(maskCoordinates);
+                    mk.setCoordinates(sortedCoordinates);
                 }
             }
 		</script>

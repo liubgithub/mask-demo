@@ -46,6 +46,16 @@ function rotateAroundZ(point, angle) {
     ];
 }
 
+// 计算两个向量的叉积
+function crossProduct(o, a, b) {
+    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+// 计算两点之间的距离的平方
+function distanceSquared(a, b) {
+    return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y);
+}
+
 function dist(point1, point2) {
     return Math.sqrt(Math.pow(point1.x - point2.x, 2) + Math.pow(point1.y - point2.y, 2) + Math.pow(point1.z - point2.z, 2));
 }
@@ -62,10 +72,10 @@ const frustum = {
         
         // 定义基础底面形状（在XY平面，以原点为中心）
         const basePoints = [
+            [-halfWidth, halfHeight, 0],    // 左上
             [-halfWidth, -halfHeight, 0],  // 左下
             [halfWidth, -halfHeight, 0],   // 右下
-            [halfWidth, halfHeight, 0],    // 右上
-            [-halfWidth, halfHeight, 0]    // 左上
+            [halfWidth, halfHeight, 0]    // 右上
         ];
         
         // 计算四棱锥的朝向向量（从顶点指向底面中心）
@@ -114,6 +124,21 @@ const frustum = {
             return false;
         }
         return true;
+    },
+    findTop(results) {
+        let z = -Infinity;
+        let topOne = null;
+        for (let i = 0; i < results.length; i++) {
+            const coordinates = results[i].coordinates;
+            for (let j = 0; j < coordinates.length; j++) {
+                const coord = coordinates[j].coordinate;
+                if (coord.z > z) {
+                    topOne = coord;
+                    z = coord.z;
+                }
+            }
+        }
+        return topOne;
     },
     calculateLineProjectIntersection: function(pointA, pointB, planeHeight) {
         const [x1, y1, z1] = pointA;
@@ -175,6 +200,50 @@ const frustum = {
                 intersection: [intersectionX, intersectionY, intersectionZ]
             };
         }
+    },
+    convexHullCounterClockwise: function(points) {
+        if (points.length < 3) {
+            return points;
+        }
+
+        // 找到最下方的点（y坐标最小），如果有多个则选择最左边的
+        let bottom = 0;
+        for (let i = 1; i < points.length; i++) {
+            if (points[i].y < points[bottom].y || 
+                (points[i].y === points[bottom].y && points[i].x < points[bottom].x)) {
+                bottom = i;
+            }
+        }
+
+        // 将最下方的点与第一个点交换
+        [points[0], points[bottom]] = [points[bottom], points[0]];
+        const pivot = points[0];
+
+        // 按极角排序其余点
+        const remainingPoints = points.slice(1);
+        remainingPoints.sort((a, b) => {
+            const cross = crossProduct(pivot, a, b);
+            if (cross === 0) {
+                // 如果极角相同，按距离排序
+                return distanceSquared(pivot, a) - distanceSquared(pivot, b);
+            }
+            return cross > 0 ? -1 : 1;
+        });
+
+        // Graham扫描
+        const hull = [pivot];
+        
+        for (const point of remainingPoints) {
+            // 移除不构成左转的点
+            while (hull.length > 1 && 
+                   crossProduct(hull[hull.length - 2], hull[hull.length - 1], point) <= 0) {
+                hull.pop();
+            }
+            hull.push(point);
+        }
+        const lastOne = hull.pop();
+        hull.unshift(lastOne);
+        return hull;
     }
 }
 export default frustum;

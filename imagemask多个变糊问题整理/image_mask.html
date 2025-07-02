@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>瓦片图层与地理投影 - 只显示指定范围内的瓦片</title>
+  <style type="text/css">
+    html,
+    body {
+      margin: 0px;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .container {
+      width: 100%;
+      height: 100%;
+      background-color: rgba(1, 1, 1, 0.2);
+    }
+    .btns {
+      position: absolute;
+      top: 30px;
+      left: 50px;
+    }
+  </style>
+  <script type="text/javascript" src="./maptalks-gl.js"></script>
+  <body>
+    <div
+      style="
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        display: none;
+        z-index: 1;
+      "
+    ></div>
+    <div id="map" class="container"></div>
+    <div class="btns">
+      <button onclick="addImg1()">添加图片1</button>
+      <button onclick="addImg2()">添加图片2</button>
+      <button onclick="addImg3()">添加图片3</button>
+    </div>
+
+    <script type="module">
+      // 使用的是0.109.0版本maptalks-gl
+
+      // 问题描述：
+      // 1. baseLayer的maxAvailableZoom无效，到19级还是会显示无影像，并未复用18级数据
+      // 2. 使用天地图地形的话视锥和视频四至有错位，改用本地地形切片不会。但是项目需要使用天地图地形，因为范围比较大。
+      // 之前反馈过第二个问题，当时说是地形可能没有加载完全。想问下有没有好的解决方案，既能保证使用在线地形切片，又能保证视锥和图片四至无错位。
+      var map = new maptalks.Map("map", {
+        center: [114.148509777777791, 38.03880611111111],
+        zoom: 16,
+        pitch: 30,
+        spatialReference: {
+          projection: "EPSG:4326",
+        },
+      });
+
+      let baseLayer = new maptalks.TileLayer("base", {
+        tileSystem: [1, -1, -180, 90],
+        urlTemplate:
+          "https://t{s}.tianditu.gov.cn/img_c/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=c&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=349f6b213b98a6c2cee477ac2da5f6b8",
+        subdomains: ["0", "1", "2", "3", "4", "5", "6", "7"],
+        attribution:
+          '&copy; <a target="_blank" href="http://www.tianditu.cn">Tianditu</a>',
+        cssFilter: "brightness(100%) saturate(100%)",
+        maxAvailableZoom: 18,
+      });
+
+      let va = [
+        [
+          [106.69794234244392, 29.53322364725615],
+          [106.69794234244392, 29.49743650979333],
+          [106.77090898657491, 29.49743650979333],
+          [106.77090898657491, 29.53322364725615],
+          [106.69794234244392, 29.53322364725615],
+        ],
+      ];
+      var mks = [];
+      var mk;
+      var mk1 = new maptalks.ImageMask(va, {
+        url: "./images/01.jpeg",
+      });
+      var mk2 = new maptalks.ImageMask(va, {
+        url: "./images/02.jpeg",
+      });
+      var mk3 = new maptalks.ImageMask(va, {
+        url: "./images/03.jpeg",
+      });
+      //自动化
+      let terrain = {
+        // 使用本地切片--17级tif的切片
+        // id: "terrain",
+        // type: "cesium",
+        // requireSkuToken: false,
+        // urlTemplate: './terrain/{z}/{x}/{y}.terrain',
+        // maxAvailableZoom: 17,
+
+        // 使用天地图地形
+        type: "tianditu",
+        maxAvailableZoom: 12,
+        urlTemplate:
+          "https://t{s}.tianditu.gov.cn/mapservice/swdx?T=elv_c&tk=349f6b213b98a6c2cee477ac2da5f6b8&x={x}&y={y}&l={z}",
+        subdomains: ["1", "2", "3", "4", "5"],
+
+        masks: mks,
+      };
+
+      const group = new maptalks.GroupGLLayer("group", [baseLayer], {
+        terrain,
+        sceneConfig: {
+          environment: {
+            enable: false,
+            mode: 0,
+            level: 0,
+            brightness: 1,
+          },
+          shadow: {
+            type: "esm",
+            enable: false,
+            quality: "high",
+            opacity: 0.5,
+            color: [0, 0, 0],
+            blurOffset: 1,
+          },
+          postProcess: {
+            enable: true,
+            antialias: {
+              enable: true,
+            },
+            ssr: {
+              enable: true,
+            },
+            bloom: {
+              enable: true,
+            },
+            outline: {
+              enable: true,
+            },
+          },
+        },
+      }).addTo(map);
+      //将辅助线图层预先添加到组图层中，避重绘
+      new maptalks.LineStringLayer("helperLinestringLayer").addTo(group);
+      map.on("click", (e) => {
+        console.log(e.coordinate);
+      });
+      function addImg1() {
+        map.setCenter([114.14850977777779, 38.03880611111111]);
+        map.setZoom(17.5);
+        mk = mk1;
+        renderMask(
+          [114.14850977777779, 38.03880611111111, 351.091],
+          71.10492759852485,
+          56.44719382248666,
+          3.5,
+          121.4
+        );
+        mks.push(mk1);
+        group.getLayer("__terrain_in_group").setMask(mks);
+      }
+      function addImg2() {
+        map.setCenter([114.14959197222223, 38.04148905555555]);
+        map.setZoom(17.5);
+        mk = mk2;
+        renderMask(
+          [114.14959197222223, 38.04148905555555, 340.618],
+          71.10492759852485,
+          56.44719382248666,
+          1.5,
+          137.9
+        );
+        mks.push(mk2);
+        group.getLayer("__terrain_in_group").setMask(mks);
+      }
+      function addImg3() {
+        map.setCenter([114.14538869444445, 38.03889230555556]);
+        map.setZoom(17.5);
+        mk = mk3;
+        renderMask(
+          [114.14538869444445, 38.03889230555556, 333.86],
+          71.10492759852485,
+          56.44719382248666,
+          -0.9000000000000057,
+          -58.2
+        );
+        mks.push(mk3);
+        group.getLayer("__terrain_in_group").setMask(mks);
+      }
+      function updateHelperLine(topCoord, coordinates) {
+        const helperLinestringLayer = group.getLayer("helperLinestringLayer");
+        helperLinestringLayer.clear();
+        for (let i = 0; i < coordinates.length; i++) {
+          const line = new maptalks.LineString([coordinates[i], topCoord], {
+            symbol: {
+              lineColor: [1, 1, 0, 1],
+              lineWidth: 2,
+            },
+          }).addTo(helperLinestringLayer);
+        }
+      } //17 + 5.4 + 4 + 1 + 1 = 28.6
+      function calculateIntersections(f, h, v, pitch, heading, height) {
+        // 将角度转换为弧度
+        const hRad = toRadians(h / 2);
+        const vRad = toRadians(v / 2);
+        const pitchRad = toRadians(pitch);
+        const headingRad = toRadians(heading);
+
+        // 定义视锥体的四个方向向量（未旋转前）
+        // 左上、右上、右下、左下
+        // const directions = [
+        //   [-Math.tan(hRad), Math.tan(vRad), -1], // 左上
+        //   [Math.tan(hRad), Math.tan(vRad), -1], // 右上
+        //   [Math.tan(hRad), -Math.tan(vRad), -1], // 右下
+        //   [-Math.tan(hRad), -Math.tan(vRad), -1], // 左下
+        // ];
+        const directions = [
+          [-Math.tan(hRad), Math.tan(vRad), -1], // 左上
+          [-Math.tan(hRad), -Math.tan(vRad), -1], // 左下
+          [Math.tan(hRad), -Math.tan(vRad), -1], // 右下
+          [Math.tan(hRad), Math.tan(vRad), -1], // 右上
+        ];
+
+        // 应用旋转变换
+        const rotatedDirections = directions.map((dir) => {
+          // 首先绕x轴旋转pitch角度
+          let x = dir[0];
+          let y = dir[1] * Math.cos(pitchRad) - dir[2] * Math.sin(pitchRad);
+          let z = dir[1] * Math.sin(pitchRad) + dir[2] * Math.cos(pitchRad);
+
+          // 然后绕z轴旋转heading角度
+          const xNew = x * Math.cos(headingRad) - y * Math.sin(headingRad);
+          const yNew = x * Math.sin(headingRad) + y * Math.cos(headingRad);
+
+          return [xNew, yNew, z];
+        });
+
+        // 计算射线与水平平面的交点
+        const intersections = rotatedDirections.map((dir) => {
+          // 参数方程: f + t * dir = (x, y, height)
+          // 求解t: f[2] + t * dir[2] = height
+          const t = (height - f[2]) / dir[2];
+
+          // 计算交点坐标
+          return [f[0] + t * dir[0], f[1] + t * dir[1], height];
+        });
+
+        return intersections;
+      }
+
+      function toRadians(degrees) {
+        return (degrees * Math.PI) / 180;
+      }
+
+      const center = map.getCenter();
+      function renderMask(f, h, v, pitch, heading) {
+        const topCoord = new maptalks.Coordinate(f[0], f[1], f[2]);
+        const topPoint = map.coordinateToPointAtRes(topCoord, map.getGLRes());
+        const zPoint = map.altitudeToPoint(topCoord.z, map.getGLRes());
+        const intersections = calculateIntersections(
+          [topPoint.x, topPoint.y, zPoint],
+          h,
+          v,
+          pitch,
+          heading,
+          0
+        );
+        const newCoordinates = intersections.map((p) => {
+          const coord = map.pointAtResToCoordinate(
+            new maptalks.Point(p[0], p[1]),
+            map.getGLRes()
+          );
+          coord.z = p[2] / map.altitudeToPoint(1, map.getGLRes());
+          return coord;
+        });
+        const results = raycastTest(topCoord, newCoordinates);
+        console.log(results, "results");
+        if (results.length === 4) {
+          mk.setCoordinates(results);
+          updateHelperLine(f, results);
+        } else if (results.length) {
+          const heightPoint = map.altitudeToPoint(results[0].z, map.getGLRes());
+          const intersects = calculateIntersections(
+            [topPoint.x, topPoint.y, zPoint],
+            h,
+            v,
+            pitch,
+            heading,
+            heightPoint
+          );
+          const coords = intersects.map((p) => {
+            const coord = map.pointAtResToCoordinate(
+              new maptalks.Point(p[0], p[1]),
+              map.getGLRes()
+            );
+            coord.z = p[2] / map.altitudeToPoint(1, map.getGLRes());
+            return coord;
+          });
+          mk.setCoordinates(newCoordinates);
+          updateHelperLine(f, newCoordinates);
+        }
+      }
+
+      const terrainLayer = group.getLayer("__terrain_in_group");
+      //重写
+      terrainLayer["getProjViewMatrixInOrtho"] = function (maskExtent) {
+        // const center = maskExtent.getCenter();
+        const center = map.getCenter();
+        // const zoom = map.getFitZoom(maskExtent);
+        const zoom = map.getZoom();
+        if (!this._vmap) {
+          const container = document.createElement("div");
+          container.style.width = map.width + "px";
+          container.style.height = map.height + "px";
+          container.style.position = "absolute";
+          container.style.top = "0px";
+          container.style.left = "0px";
+          container.style.zIndex = "-1";
+          document.body.appendChild(container);
+          this._vmap = new maptalks.Map(container, {
+            center,
+            zoom,
+            pitch: 0,
+            bearing: 0,
+            spatialReference: map.getSpatialReference().options,
+          });
+        }
+        this._vmap.setView({ center, zoom, pitch: 0, bearing: 0 });
+        const mapExtent = this._vmap.getExtent();
+        const pvMatrix = maptalks.mat4.copy([], this._vmap.projViewMatrix);
+        return { mapExtent, projViewMatrix: pvMatrix };
+      };
+      // 改动
+      function raycastTest(from, coordinates) {
+        const results = [];
+        const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
+        for (let i = 0; i < coordinates.length; i++) {
+          const to = coordinates[i];
+          const raycast = new maptalks.RayCaster(from, to, true);
+          const result = raycast.test(meshes, map);
+          if (result && result.length) {
+            results.push(result[0].coordinates[0].coordinate);
+          }
+        }
+        return results;
+      }
+
+      window.addImg1 = addImg1;
+      window.addImg2 = addImg2;
+      window.addImg3 = addImg3;
+      //在地图缩放后，需要更新mask的坐标, 因为地形数据在不同级别下精度不同，所以交点会不一致，从而产生错位
+      //产生错位一般都是地形数据发生变化了，此时若能及时更新一下mask坐标就可以解决了
+      // map.on("zoomend", function () {
+      //   if (mk) {
+      //     renderMask(
+      //       [114.14850977777779, 38.03880611111111, 351.091],
+      //       71.10492759852485,
+      //       56.44719382248666,
+      //       3.5,
+      //       121.4
+      //     );
+      //   }
+      // });
+    </script>
+  </body>
+</html>

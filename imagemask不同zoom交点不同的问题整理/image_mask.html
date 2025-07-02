@@ -140,21 +140,21 @@
         console.log(e.coordinate);
       });
       function addImg1() {
-        // map.setCenter([114.14850977777779, 38.03880611111111]);
-        // map.setZoom(17.5);
-        // map.animateTo(
-        //   {
-        //     zoom: 17,
-        //     center: [114.15142236111112, 38.027717277777775, 416.76],
-        //     pitch: 30,
-        //     bearing: 0,
-        //   },
-        //   {
-        //     duration: 1000,
-        //     easing: "out",
-        //   },
-        //   () => {}
-        // );
+        map.setCenter([114.14850977777779, 38.03880611111111]);
+        map.setZoom(17.5);
+        map.animateTo(
+          {
+            zoom: 17,
+            center: [114.15142236111112, 38.027717277777775, 416.76],
+            pitch: 30,
+            bearing: 0,
+          },
+          {
+            duration: 1000,
+            easing: "out",
+          },
+          () => {}
+        );
         mk = mk1;
         renderMask(
           [114.15142236111112, 38.027717277777775, 416.76],
@@ -253,30 +253,16 @@
           return coord;
         });
         const results = raycastTest(topCoord, newCoordinates);
+        if (results.length === 3 && lastResult[3]) {
+          results.push(lastResult[3])
+        }
+        if (results[3]) {
+          lastResult = results;
+        }
         console.log(results, "results");
         if (results.length === 4) {
           mk.setCoordinates(results);
           updateHelperLine(f, results);
-        } else if (results.length) {
-          const heightPoint = map.altitudeToPoint(results[0].z, map.getGLRes());
-          const intersects = calculateIntersections(
-            [topPoint.x, topPoint.y, zPoint],
-            h,
-            v,
-            pitch,
-            heading,
-            heightPoint
-          );
-          const coords = intersects.map((p) => {
-            const coord = map.pointAtResToCoordinate(
-              new maptalks.Point(p[0], p[1]),
-              map.getGLRes()
-            );
-            coord.z = p[2] / map.altitudeToPoint(1, map.getGLRes());
-            return coord;
-          });
-          mk.setCoordinates(newCoordinates);
-          updateHelperLine(f, newCoordinates);
         }
       }
 
@@ -308,11 +294,13 @@
         return { mapExtent, projViewMatrix: pvMatrix };
       };
       // 改动
+      let lastResult = [];
       function raycastTest(from, coordinates) {
         const results = [];
         const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
         for (let i = 0; i < coordinates.length; i++) {
           const to = coordinates[i];
+          console.log(to);
           const raycast = new maptalks.RayCaster(from, to, true);
           const result = raycast.test(meshes, map);
           if (result && result.length) {

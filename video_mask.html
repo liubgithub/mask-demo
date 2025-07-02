@@ -22,7 +22,7 @@
 		<script type="text/javascript" src="../../../vt/dist/maptalks.vt.js"></script>
 		<script type="text/javascript" src="../../dist/maptalks.gltf.js"></script> -->
   <script type="text/javascript" src="maptalks-gl.js"></script>
-    <script src="https://unpkg.com/@turf/turf/turf.min.js"></script>
+    <!-- <script src="https://unpkg.com/@turf/turf/turf.min.js"></script> -->
   <body>
     <div
       style="
@@ -134,32 +134,7 @@
         }
       ).addTo(map);
       const center = map.getCenter();
-      const vLayer = new maptalks.VectorLayer("vectot").addTo(map);
-
-      function updateHelperLine(topCoord, coordinates) {
-        const helperLinestringLayer = group.getLayer("helperLinestringLayer");
-        helperLinestringLayer.clear();
-        for (let i = 0; i < coordinates.length; i++) {
-          const line = new maptalks.LineString([coordinates[i], topCoord], {
-            symbol: {
-              lineColor: [1, 1, 0, 1],
-              lineWidth: 2,
-            },
-          }).addTo(helperLinestringLayer);
-
-          const baseLine = new maptalks.LineString(
-            i < coordinates.length - 1
-              ? [coordinates[i], coordinates[i + 1]]
-              : [coordinates[i], coordinates[0]],
-            {
-              symbol: {
-                lineColor: [0, 1, 1, 1],
-                lineWidth: 2,
-              },
-            }
-          ).addTo(helperLinestringLayer);
-        }
-      }
+      const vLayer = new maptalks.VectorLayer("vector").addTo(map);
 
       function initGUI() {
         const gui = new GUI();
@@ -221,10 +196,10 @@
 
       const terrainLayer = group.getLayer("__terrain_in_group");
       //重写
-      terrainLayer["getProjViewMatrixInOrtho"] = function (maskExtent) {
+      terrainLayer["getProjViewMatrixInOrtho"] = function(maskExtent) {
         const center = maskExtent.getCenter();
         const zoom = map.getFitZoom(maskExtent);
-        if (!this._vmap) {
+        if (!frustum.vmap) {
           const container = document.createElement("div");
           container.style.width = map.width + "px";
           container.style.height = map.height + "px";
@@ -233,7 +208,7 @@
           container.style.left = "0px";
           container.style.zIndex = "-1";
           document.body.appendChild(container);
-          this._vmap = new maptalks.Map(container, {
+          frustum.vmap = new maptalks.Map(container, {
             center,
             zoom,
             pitch: 0,
@@ -241,26 +216,31 @@
             spatialReference: map.getSpatialReference().options,
           });
         }
-        this._vmap.setView({ center, zoom, pitch: 0, bearing: 0 });
-        const mapExtent = this._vmap.getExtent();
-        const pvMatrix = maptalks.mat4.copy([], this._vmap.projViewMatrix);
+        frustum.vmap.setView({ center, zoom, pitch: 0, bearing: 0 });
+        const mapExtent = frustum.vmap.getExtent();
+        const pvMatrix = maptalks.mat4.copy([], frustum.vmap.projViewMatrix);
         return { mapExtent, projViewMatrix: pvMatrix };
       };
 
       let mk = null;
-      function raycastTest(line, index) {
-				const results = [];
-				const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
-				const from = line[0].z > line[1].z ? line[0] : line[1], to = line[0].z > line[1].z ? line[1] : line[0];
-				const raycast = new maptalks.RayCaster(from, to, true);
-        const result = raycast.test(meshes, map);
-        if (result && result.length) {
-            const coord = frustum.findTop(result);
-            if (frustum.isInLine(from, to, coord)) {
-                results.push(coord);
-                new maptalks.Marker(results[0], {
+      
+
+      function renderFrustum() {
+          const glRes = map.getGLRes();
+          //方法所需要的参数列表准备
+          const topCoord = new maptalks.Coordinate(center.x + params.longitude, center.y + params.latitude, params.height)
+          const pitch = params.pitch;
+          const heading = params.heading;
+          const horizontal = params.horizontal;
+          const vertical = params.vertical;
+          const distance = params.distance;
+          const maskCoordinates = frustum.getMaskCoordinates(group, topCoord, distance, pitch, heading, horizontal, vertical);
+          //画四个交点
+          vLayer.clear();
+          maskCoordinates.forEach((c, index) => {
+            new maptalks.Marker(c, {
                     symbol: {
-                        textName: '',
+                        textName: index,
                         textFill: '#f00',
                         textDy: -20,
                         markerType: 'ellipse',
@@ -268,67 +248,18 @@
                         markerHeight: 10
                     }
                 }).addTo(vLayer);
-            }
-        }
-				return { coordinate: results[0], index };
-			}
-
-      function renderFrustum() {
-          const glRes = map.getGLRes();
-          const topcoord = new maptalks.Coordinate(center.x + params.longitude, center.y + params.latitude, params.height)
-          const point = map.coordinateToPointAtRes(topcoord, glRes);
-          const pointZ = map.altitudeToPoint(topcoord.z, glRes);
-          const pitch = params.pitch;
-          const heading = params.heading;
-          const horizontal = params.horizontal;
-          const vertical = params.vertical;
-          const pointAltitude = map.altitudeToPoint(topcoord.z - params.distance, glRes);
-          const distance = pointZ - pointAltitude;
-          const r = frustum.calculatePyramidBase([point.x, point.y, pointZ], pitch, heading, distance, horizontal, vertical);
-          const basePoints = r.basePoints;
-          const coordinates = basePoints.map(bp => {
-              const c = map.pointAtResToCoordinate(new maptalks.Point(bp[0], bp[1]), glRes);
-              c.z = bp[2] / map.altitudeToPoint(1, glRes);
-              return c;
-          })
-				vLayer.clear();
-        updateHelperLine(topcoord, coordinates);
-        const frustumLines = [
-					[topcoord, coordinates[0]],
-					[topcoord, coordinates[1]],
-					[topcoord, coordinates[2]],
-					[topcoord, coordinates[3]],
-          [coordinates[2], coordinates[3]],
-					[coordinates[0], coordinates[1]],
-					[coordinates[1], coordinates[2]],
-					[coordinates[3], coordinates[0]]
-				];
-        const maskCoordinates = [];
-        let hasBaselinePoint = false;
-        for (let i = 0; i < frustumLines.length; i++) {
-            const result = raycastTest(frustumLines[i], i);
-            if (result.coordinate) {
-                maskCoordinates.push(result.coordinate);
-                if (result.index > 3) {
-                  hasBaselinePoint = true;
-                }
-            }
-        }
-        if (hasBaselinePoint) {
-          const lastOne = maskCoordinates.pop();
-          maskCoordinates.unshift(lastOne);
-        }
-        if (maskCoordinates.length < 4) {
-           return;
-        }
-        if (!mk) {
-            mk = new maptalks.VideoMask(maskCoordinates, {
-              elementId: 'playArea'
-            });
-            terrainLayer.setMask(mk);
-        } else {
-            mk.setCoordinates(maskCoordinates);
-        }
+          });
+          if (maskCoordinates.length < 4) {
+            return;
+          }
+          if (!mk) {
+              mk = new maptalks.VideoMask(maskCoordinates, {
+                elementId: 'playArea'
+              });
+              terrainLayer.setMask(mk);
+          } else {
+              mk.setCoordinates(maskCoordinates);
+          }
       }
 		</script>
   </body>

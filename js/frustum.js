@@ -1,3 +1,4 @@
+let vmap = null;
 // 数学工具函数
 function toRadians(degrees) {
     return degrees * Math.PI / 180;
@@ -289,6 +290,88 @@ const frustum = {
         );
 
         sortedCoordinates.push(p4);
+    },
+    updateHelperLine: function(group, topCoord, coordinates) {
+        const helperLinestringLayer = group.getLayer("helperLinestringLayer");
+        helperLinestringLayer.clear();
+        for (let i = 0; i < coordinates.length; i++) {
+          const line = new maptalks.LineString([coordinates[i], topCoord], {
+            symbol: {
+              lineColor: [1, 1, 0, 1],
+              lineWidth: 2,
+            },
+          }).addTo(helperLinestringLayer);
+
+          const baseLine = new maptalks.LineString(
+            i < coordinates.length - 1
+              ? [coordinates[i], coordinates[i + 1]]
+              : [coordinates[i], coordinates[0]],
+            {
+              symbol: {
+                lineColor: [0, 1, 1, 1],
+                lineWidth: 2,
+              },
+            }
+          ).addTo(helperLinestringLayer);
+        }
+    },
+    raycastTest: function(group, line, index) {
+        const results = [];
+        const terrainLayer = group.getLayer('__terrain_in_group');
+        const meshes = terrainLayer.getRenderer().getAnalysisMeshes();
+        const from = line[0].z > line[1].z ? line[0] : line[1], to = line[0].z > line[1].z ? line[1] : line[0];
+        const raycast = new maptalks.RayCaster(from, to, true);
+        const map = group.getMap();
+        const result = raycast.test(meshes, map);
+        if (result && result.length) {
+            const coord = frustum.findTop(result);
+            if (frustum.isInLine(from, to, coord)) {
+                results.push(coord);
+            }
+        }
+        return { coordinate: results[0], index };
+    },
+    getMaskCoordinates: function(group, topCoord, distance, pitch, heading, horizonAngle, verticalAngle) {
+        const map = group.getMap();
+        const glRes = map.getGLRes();
+        const point = map.coordinateToPointAtRes(topCoord, glRes);
+        const pointZ = map.altitudeToPoint(topCoord.z, glRes);
+        const pointAltitude = map.altitudeToPoint(topCoord.z - distance, glRes);
+        const dist = pointZ - pointAltitude;
+        const r = this.calculatePyramidBase([point.x, point.y, pointZ], pitch, heading, dist, horizonAngle, verticalAngle);
+        const basePoints = r.basePoints;
+        const coordinates = basePoints.map(bp => {
+            const c = map.pointAtResToCoordinate(new maptalks.Point(bp[0], bp[1]), glRes);
+            c.z = bp[2] / map.altitudeToPoint(1, glRes);
+            return c;
+        });
+        this.updateHelperLine(group, topCoord, coordinates);
+        const frustumLines = [
+                [topCoord, coordinates[0]],
+                [topCoord, coordinates[1]],
+                [topCoord, coordinates[2]],
+                [topCoord, coordinates[3]],
+                [coordinates[2], coordinates[3]],
+                [coordinates[0], coordinates[1]],
+                [coordinates[1], coordinates[2]],
+                [coordinates[3], coordinates[0]]
+        ];
+        const maskCoordinates = [];
+        let hasBaselinePoint = false;
+        for (let i = 0; i < frustumLines.length; i++) {
+            const result = this.raycastTest(group, frustumLines[i], i);
+            if (result.coordinate) {
+                maskCoordinates.push(result.coordinate);
+                if (result.index > 3) {
+                  hasBaselinePoint = true;
+                }
+            }
+        }
+        if (hasBaselinePoint) {
+          const lastOne = maskCoordinates.pop();
+          maskCoordinates.unshift(lastOne);
+        }
+        return maskCoordinates;
     }
 }
 export default frustum;

@@ -23,17 +23,20 @@
       left: 50px;
     }
   </style>
-  <script type="text/javascript" src="./maptalks-gl.js"></script>
+  <!-- <script type="text/javascript" src="./maptalks-gl.js"></script> -->
+  <script type="text/javascript" src="http://localhost:8012/dist/maptalks.js"></script>
+  <script type="text/javascript" src="../../../../gl/dist/maptalksgl.js"></script>
+<script type="text/javascript" src="../../../../vt/dist/maptalks.vt.js"></script>
   <body>
     <div
-      style="
-        position: absolute;
-        width: 50px;
-        height: 50px;
-        display: none;
-        z-index: 1;
-      "
-    ></div>
+    style="
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      display: none;
+      z-index: 1;
+    "
+  ></div>
     <div id="map" class="container"></div>
     <div class="btns">
       <button onclick="addImg1()">添加图片1</button>
@@ -305,10 +308,8 @@
       const terrainLayer = group.getLayer("__terrain_in_group");
       //重写
       terrainLayer["getProjViewMatrixInOrtho"] = function (maskExtent) {
-        // const center = maskExtent.getCenter();
-        const center = map.getCenter();
-        // const zoom = map.getFitZoom(maskExtent);
-        const zoom = map.getZoom();
+        const center = maskExtent.getCenter();
+        const zoom = map.getFitZoom(maskExtent);
         if (!this._vmap) {
           const container = document.createElement("div");
           container.style.width = map.width + "px";
